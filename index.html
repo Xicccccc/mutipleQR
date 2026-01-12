@@ -1,1 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Professional Digital ID - Multi Profile</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="Style.css">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+</head>
+<body>
+  <!-- Intro Screen -->
+  <div class="intro-screen" id="introScreen">
+    <div class="intro-content">
+      <img src="CAMSI.png" alt="Company Logo" class="intro-logo">
+      <h1>Welcome!</h1>
+      <p>Employee Digital ID Dashboard</p>
+    </div>
+  </div>
+
+  <main id="employee-list" class="profile-wrapper">
+    <!-- Employee cards will be generated here -->
+  </main>
+
+  <!-- PIN Modal -->
+  <div class="pin-overlay" id="pinOverlay">
+    <div class="pin-modal">
+      <h3>Enter 4-Digit PIN</h3>
+      <input type="password" maxlength="4" inputmode="numeric" class="pin-input" id="pinInput" placeholder="••••"/>
+      <p class="pin-error" id="pinError">Incorrect PIN</p>
+      <button class="SaveContacts" onclick="verifyPin()">Unlock</button>
+      <button class="pin-cancel" onclick="closePinModal()">Cancel</button>
+    </div>
+  </div>
+
+<script>
+/* ===================== Employee Data ===================== */
+const employees = [
+  {
+    id: 1,
+    fullName: "Erick Yosorez Villafuerte",
+    role: "HR Specialist",
+    mobile: "0963-362-1187",
+    email: "eyv.addleman@gmail.com",
+    facebook: "https://www.facebook.com/erick.villafuerte.790",
+    profilePic: "IMAHE.jpeg",
+    govIDs: { SSS: "3462641350", TIN: "397420677000", PhilHealth: "210254192952", PagIBIG: "121182442001" }
+  },
+  {
+    id: 2,
+    fullName: "Jane Doe",
+    role: "IT Support",
+    mobile: "0917-555-1234",
+    email: "jane.doe@example.com",
+    facebook: "https://facebook.com/janedoe",
+    profilePic: "Jane.jpeg",
+    govIDs: { SSS: "1234567890", TIN: "9876543210", PhilHealth: "1122334455", PagIBIG: "5566778899" }
+  }
+];
+
+/* ===================== PIN Logic ===================== */
+const CORRECT_PIN = "1234";
+let attempts = 0;
+const MAX_ATTEMPTS = 5;
+let currentEmployee = null;
+
+/* ===================== Utility Functions ===================== */
+function generateVCard(emp) {
+  return `
+BEGIN:VCARD
+VERSION:3.0
+FN:${emp.fullName}
+ORG:${emp.role}
+TEL;TYPE=CELL:${emp.mobile}
+EMAIL;TYPE=INTERNET:${emp.email}
+NOTE:Facebook: ${emp.facebook}
+END:VCARD`.trim();
+}
+
+function downloadVCard(id) {
+  const emp = employees.find(e => e.id === id);
+  const blob = new Blob([generateVCard(emp)], { type: "text/vcard" });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${emp.fullName.replace(/\s+/g,'_')}.vcf`;
+  link.click();
+}
+
+/* Save as Note */
+function saveAsNote(emp) {
+  const noteText = `
+${emp.fullName}
+${emp.role}
+Mobile: ${emp.mobile}
+Email: ${emp.email}
+Facebook: ${emp.facebook}
+
+SSS: ${emp.govIDs.SSS}
+TIN: ${emp.govIDs.TIN}
+PhilHealth: ${emp.govIDs.PhilHealth}
+Pag-IBIG: ${emp.govIDs.PagIBIG}
+`.trim();
+
+  const blob = new Blob([noteText], { type: "text/plain" });
+  const file = new File([blob], "Contact_Info.txt", { type: "text/plain" });
+
+  if (navigator.share) {
+    navigator.share({
+      title: "Contact Information",
+      text: noteText,
+      files: [file]
+    }).catch(() => {});
+  } else {
+    const textarea = document.createElement("textarea");
+    textarea.value = noteText;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+    alert("Copied. Paste into Notes.");
+  }
+}
+
+/* ===================== Generate Employee Cards ===================== */
+const container = document.getElementById('employee-list');
+employees.forEach(emp => {
+  const card = document.createElement('section');
+  card.className = 'profile-card';
+  card.innerHTML = `
+    <header class="profile-header">
+      <h1>${emp.fullName}</h1>
+      <div class="avatar-container">
+        <img src="${emp.profilePic}" class="avatar">
+      </div>
+      <span class="role">${emp.role}</span>
+    </header>
+
+    <section class="profile-section">
+      <h2>Contact Information</h2>
+      <div class="info-row"><span>Mobile</span><a href="tel:${emp.mobile}">${emp.mobile}</a></div>
+      <div class="info-row"><span>Email</span><a href="mailto:${emp.email}">${emp.email}</a></div>
+      <div class="info-row"><span>Facebook</span><a href="${emp.facebook}">${emp.fullName}</a></div>
+    </section>
+
+    <section class="profile-section sensitive locked" id="govSection-${emp.id}">
+      <h2>Government IDs</h2>
+      <div class="info-row"><span>SSS</span><span>${emp.govIDs.SSS}</span></div>
+      <div class="info-row"><span>TIN</span><span>${emp.govIDs.TIN}</span></div>
+      <div class="info-row"><span>PhilHealth</span><span>${emp.govIDs.PhilHealth}</span></div>
+      <div class="info-row"><span>Pag-IBIG</span><span>${emp.govIDs.PagIBIG}</span></div>
+    </section>
+
+    <div class="button-row">
+      <canvas id="qr-${emp.id}"></canvas>
+      <button class="SaveContacts" onclick="downloadVCard(${emp.id})">
+        <span class="btn-text">Save Contact</span>
+        <span class="btn-check">✓</span>
+      </button>
+      <button class="SaveContacts note" onclick="saveAsNote(${emp.id})">
+        <span class="btn-text">Save as Note</span>
+      </button>
+      <button class="SaveContacts pin-btn" onclick="openPinModal(${emp.id})">
+        Unlock Government IDs
+      </button>
+    </div>
+  `;
+  container.appendChild(card);
+
+  // Generate QR Code
+  QRCode.toCanvas(document.getElementById(`qr-${emp.id}`), generateVCard(emp));
+});
+
+/* ===================== PIN Modal ===================== */
+function openPinModal(empId) {
+  currentEmployee = employees.find(e => e.id === empId);
+  const pinOverlay = document.getElementById("pinOverlay");
+  const pinInput = document.getElementById("pinInput");
+  const pinError = document.getElementById("pinError");
+
+  pinOverlay.style.display = "flex";
+  pinInput.value = "";
+  pinError.style.display = "none";
+  pinInput.disabled = false;
+  pinInput.focus();
+}
+
+function closePinModal() {
+  document.getElementById("pinOverlay").style.display = "none";
+}
+
+function verifyPin() {
+  const input = document.getElementById("pinInput");
+  const error = document.getElementById("pinError");
+  const modal = document.querySelector(".pin-modal");
+
+  if (attempts >= MAX_ATTEMPTS) {
+    error.textContent = "Too many attempts. Access locked.";
+    error.style.display = "block";
+    input.disabled = true;
+    return;
+  }
+
+  if (input.value === CORRECT_PIN && currentEmployee) {
+    const govSection = document.getElementById(`govSection-${currentEmployee.id}`);
+    govSection.classList.remove("locked");
+    govSection.classList.add("unlocked");
+
+    // Unlock animation
+    govSection.style.animation = "none";
+    void govSection.offsetWidth;
+    govSection.style.animation = "unlockSuccess 0.6s ease forwards";
+    govSection.classList.add("gov-glow");
+    setTimeout(() => govSection.classList.remove("gov-glow"), 1000);
+
+    closePinModal();
+    attempts = 0;
+  } else {
+    attempts++;
+    error.textContent = `Incorrect PIN. Try again (${MAX_ATTEMPTS - attempts} left)`;
+    error.style.display = "block";
+    modal.classList.remove("shake");
+    void modal.offsetWidth;
+    modal.classList.add("shake");
+    input.value = "";
+    input.focus();
+  }
+}
+
+/* ===================== Intro Screen Animation ===================== */
+setTimeout(() => document.getElementById("introScreen")?.remove(), 3500);
+</script>
+</body>
+</html>
 
